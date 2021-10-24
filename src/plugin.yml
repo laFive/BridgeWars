@@ -1,0 +1,11 @@
+name: BridgeWars
+version: 1.0
+author: [laFive]
+main: me.lafive.bridgewars.BridgeWars
+softdepend: [Multiverse-Core]
+commands:
+  lobby:
+    aliases: [spawn, l]
+  setspawn:
+  setbalance:
+  arena:
