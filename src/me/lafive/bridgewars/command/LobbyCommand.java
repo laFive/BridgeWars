@@ -31,7 +31,7 @@ public class LobbyCommand implements CommandExecutor {
                         });
                         player.setAllowFlight(false);
                         player.setGameMode(GameMode.SURVIVAL);
-                        player.playSound(player.getLocation(), Sound.LEVEL_UP, 10.0F, 10.0F);
+                        player.playSound(player.getLocation(), Sound.LEVEL_UP, 10.0F, 0);
                         player.setFoodLevel(20);
                         player.setHealth(20.0D);
                         player.setFireTicks(0);
@@ -64,7 +64,7 @@ public class LobbyCommand implements CommandExecutor {
                         return true;
                   } else {
                         BridgeWars.getInstance().getArenaManager().getArenas().forEach((a) -> {
-                              a.handleGameLeave(player);
+                              a.handleGameLeave(player, true);
                         });
                         return true;
                   }

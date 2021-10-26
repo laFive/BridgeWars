@@ -62,6 +62,61 @@ public class MenuUtil {
             player.playSound(player.getLocation(), Sound.NOTE_PLING, 10.0F, 5.0F);
       }
 
+      public static void openKitSelector(Player player, String selectedKit, Arena arena) {
+            final PlayerData data = BridgeWars.getInstance().getDataManager().getPlayerData(player.getUniqueId());
+            Menu kitShopMenu = new Menu(ChatColor.GOLD.toString() + ChatColor.BOLD + "Kit Selector", 4);
+
+            int startKitSlot;
+            for(startKitSlot = 0; startKitSlot < 36; ++startKitSlot) {
+                  kitShopMenu.setMenuButton(startKitSlot, new MenuButton(new ItemStack(Material.STAINED_GLASS_PANE, 1, (short)8), ChatColor.GREEN.toString()));
+            }
+
+            startKitSlot = 9;
+            Iterator var5 = BridgeWars.getInstance().getKitManager().getKits().iterator();
+
+            while(var5.hasNext()) {
+                  final Kit kit = (Kit)var5.next();
+                  ++startKitSlot;
+                  if ((startKitSlot + 1) % 9 == 0) {
+                        startKitSlot += 2;
+                  }
+
+                  ItemStack kitItem = new ItemStack(kit.getItemMaterial());
+                  List kitLore = new ArrayList();
+                  kitLore.add(ChatColor.DARK_GRAY.toString() + "--------------------");
+                  Iterator var9 = kit.getDescription().iterator();
+
+                  while(var9.hasNext()) {
+                        String s = (String)var9.next();
+                        kitLore.add(ChatColor.GRAY + s);
+                  }
+
+                  kitLore.add(ChatColor.DARK_GRAY.toString() + "--------------------");
+                  if (kit.getName().equalsIgnoreCase(selectedKit)) {
+                        kitLore.add(ChatColor.GREEN.toString() + ChatColor.BOLD + "You selected this kit!");
+                  } else if (!data.isKitOwned(kit.getName()) && !kit.isFree()) {
+                        kitLore.add(ChatColor.RED.toString() + ChatColor.BOLD + "You do not own this kit!");
+                  } else {
+                        kitLore.add(ChatColor.YELLOW.toString() + ChatColor.BOLD + "Click to Select!");
+                  }
+
+                  MenuButton kitButton = new MenuButton(kitItem, ChatColor.GOLD.toString() + ChatColor.BOLD + kit.getName() + " Kit", kitLore);
+                  kitButton.setWhenClicked(new Consumer<Player>() {
+                        public void accept(Player p) {
+                              if ((data.isKitOwned(kit.getName()) || kit.isFree()) && !kit.getName().equalsIgnoreCase(selectedKit)) {
+                                    arena.setKit(p.getUniqueId(), kit);
+                                    p.sendMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + "You selected the " + kit.getName() + " kit!");
+                                    p.playSound(p.getLocation(), Sound.NOTE_STICKS, 10, 1);
+                                    p.closeInventory();
+                              }
+                        }
+                  });
+                  kitShopMenu.setMenuButton(startKitSlot, kitButton);
+            }
+
+            kitShopMenu.openMenu(player);
+      }
+
       public static void openKitShop(Player player) {
             final PlayerData data = BridgeWars.getInstance().getDataManager().getPlayerData(player.getUniqueId());
             Menu kitShopMenu = new Menu(ChatColor.GOLD.toString() + ChatColor.BOLD + "Kit Shop", 4);

@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="BridgeWars">
+    <output-path>$PROJECT_DIR$/out/artifacts/BridgeWars</output-path>
+    <root id="archive" name="BridgeWars.jar">
+      <element id="module-output" name="BridgeWars" />
+    </root>
+  </artifact>
+</component>

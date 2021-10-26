@@ -63,4 +63,49 @@ public class SidebarUtil {
             obj.getScore(ChatColor.GREEN + ChatColor.DARK_GRAY.toString() + ChatColor.STRIKETHROUGH + "------------------").setScore(0);
             p.setScoreboard(sb);
       }
+
+      public static void drawGameSidebar(Player p, Arena a) {
+            Scoreboard sb = Bukkit.getScoreboardManager().getNewScoreboard();
+            Objective obj = sb.registerNewObjective("gameSidebar", "N/A");
+            obj.setDisplayName(ChatColor.GOLD.toString() + ChatColor.BOLD + "BridgeWars");
+            obj.setDisplaySlot(DisplaySlot.SIDEBAR);
+            obj.getScore(ChatColor.DARK_GRAY.toString() + ChatColor.STRIKETHROUGH + "------------------").setScore(8);
+            Team startingIn = sb.registerNewTeam("GameTime");
+            startingIn.addEntry(ChatColor.GOLD.toString() + ChatColor.GREEN.toString());
+            startingIn.setPrefix(ChatColor.GRAY + "Game Time: ");
+            startingIn.setSuffix(ChatColor.YELLOW + parseSeconds(a.getGameTime()));
+            obj.getScore(ChatColor.GOLD.toString() + ChatColor.GREEN.toString()).setScore(7);
+            obj.getScore(ChatColor.GREEN.toString()).setScore(6);
+            Team players = sb.registerNewTeam("GamePlayers");
+            players.addEntry(ChatColor.RED.toString() + ChatColor.BLACK.toString());
+            players.setPrefix(ChatColor.GRAY + "Players Left: ");
+            players.setSuffix(ChatColor.YELLOW.toString() + a.getAlivePlayerCount());
+            obj.getScore(ChatColor.RED.toString() + ChatColor.BLACK.toString()).setScore(5);
+            obj.getScore(ChatColor.DARK_PURPLE.toString()).setScore(4);
+            obj.getScore(ChatColor.GRAY + "Map: " + ChatColor.YELLOW + a.getMapName()).setScore(3);
+            obj.getScore(ChatColor.WHITE.toString()).setScore(2);
+            obj.getScore(ChatColor.GOLD + "play.litpix.org").setScore(1);
+            obj.getScore(ChatColor.GREEN + ChatColor.DARK_GRAY.toString() + ChatColor.STRIKETHROUGH + "------------------").setScore(0);
+            p.setScoreboard(sb);
+      }
+
+      public static String parseSeconds(int seconds) {
+
+            int minutes = (int) Math.floor(seconds / 60);
+            seconds -= minutes * 60;
+
+            String time = "";
+            if (minutes > 0) {
+                  time = minutes + "m ";
+            }
+            if (seconds > 0) {
+                  time = time + seconds + "s";
+            } else if (minutes <= 0) {
+                  time = "0s";
+            }
+
+            return time;
+
+      }
+
 }

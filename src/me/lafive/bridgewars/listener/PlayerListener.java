@@ -9,6 +9,8 @@ import me.lafive.bridgewars.util.SidebarUtil;
 import me.lafive.core.Core;
 import me.lafive.core.profile.PlayerProfile;
 import net.md_5.bungee.api.ChatColor;
+import net.minecraft.server.v1_8_R3.PacketPlayOutAbilities;
+import net.minecraft.server.v1_8_R3.PlayerAbilities;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
@@ -46,15 +48,17 @@ public class PlayerListener implements Listener {
             PlayerProfile profile = Core.INSTANCE.getMongoManager().getProfileManager().getProfile(e.getPlayer().getUniqueId());
             e.getPlayer().teleport(this.plugin.getPluginConfig().getSpawnLocation());
             e.getPlayer().getInventory().clear();
-            e.getPlayer().getInventory().setArmorContents(new ItemStack[0]);
+            e.getPlayer().getInventory().setArmorContents(new ItemStack[] {null, null, null, null});
             e.getPlayer().getActivePotionEffects().forEach((pe) -> {
                   e.getPlayer().removePotionEffect(pe.getType());
             });
             e.getPlayer().setAllowFlight(false);
             e.getPlayer().setGameMode(GameMode.SURVIVAL);
-            e.getPlayer().playSound(e.getPlayer().getLocation(), Sound.LEVEL_UP, 10.0F, 10.0F);
+            e.getPlayer().playSound(e.getPlayer().getLocation(), Sound.LEVEL_UP, 10.0F, 0);
             e.getPlayer().setFoodLevel(20);
+            e.getPlayer().setWalkSpeed(0.2F);
             e.getPlayer().setHealth(20.0D);
+            e.getPlayer().setMaxHealth(20);
             e.getPlayer().setExp(0.0F);
             e.getPlayer().setFireTicks(0);
             e.getPlayer().setLevel(0);

@@ -24,6 +24,7 @@ public class ArenaManager {
                         String an = arenaName.replace(".yml", "");
                         Arena a = new Arena(an);
                         a.pasteSchematic();
+                        a.getChestManager().fillChestsAsync();
                         this.arenas.add(a);
                   }
             }

@@ -18,6 +18,8 @@ public class PlayerData {
       private YamlConfiguration dataYaml;
       private LobbyRunnable lobbyRunnable;
       private boolean inGame;
+      private long lastAttacked;
+      private Player lastAttacker;
 
       public PlayerData(UUID player) {
             this.player = Bukkit.getPlayer(player);
@@ -47,6 +49,14 @@ public class PlayerData {
             }
 
             this.dataYaml = YamlConfiguration.loadConfiguration(this.dataFile);
+      }
+
+      public long getLastAttacked() {
+            return lastAttacked;
+      }
+
+      public Player getLastAttacker() {
+            return lastAttacker;
       }
 
       public Player getPlayer() {

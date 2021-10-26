@@ -5,10 +5,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 public class ArenaListener implements Listener {
@@ -56,6 +58,20 @@ public class ArenaListener implements Listener {
 
       @EventHandler
       public void handleEvent(PlayerQuitEvent e) {
+            BridgeWars.getInstance().getArenaManager().getArenas().forEach((a) -> {
+                  a.handleBukkitEvent(e);
+            });
+      }
+
+      @EventHandler
+      public void handleEvent(PlayerPickupItemEvent e) {
+            BridgeWars.getInstance().getArenaManager().getArenas().forEach((a) -> {
+                  a.handleBukkitEvent(e);
+            });
+      }
+
+      @EventHandler
+      public void handleEvent(EntityDamageByEntityEvent e) {
             BridgeWars.getInstance().getArenaManager().getArenas().forEach((a) -> {
                   a.handleBukkitEvent(e);
             });

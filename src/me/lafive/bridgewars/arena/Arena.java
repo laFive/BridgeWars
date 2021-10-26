@@ -8,38 +8,43 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import javafx.geometry.Side;
 import me.lafive.bridgewars.BridgeWars;
 import me.lafive.bridgewars.arena.config.ArenaConfig;
+import me.lafive.bridgewars.arena.loot.ChestManager;
 import me.lafive.bridgewars.data.PlayerData;
 import me.lafive.bridgewars.kit.Kit;
 import me.lafive.bridgewars.runnable.LobbyRunnable;
+import me.lafive.bridgewars.util.MenuUtil;
 import me.lafive.bridgewars.util.PacketUtil;
+import me.lafive.bridgewars.util.PlayerUtil;
 import me.lafive.bridgewars.util.SidebarUtil;
 import net.md_5.bungee.api.ChatColor;
-import org.bukkit.GameMode;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
-import sun.corba.Bridge;
 
 public class Arena {
       private String name;
       private ArenaConfig config;
       private boolean started;
+      private boolean won;
       private int countdown;
+      private ChestManager chestManager;
       private int maxPlayers;
+      private int gameTime;
       private int ticks;
       private List<Player> players;
       private List<Player> alivePlayers;
@@ -52,7 +57,9 @@ public class Arena {
             this.players = new ArrayList();
             this.alivePlayers = new ArrayList();
             this.playerSpawn = new HashMap();
+            this.playerKits = new HashMap<UUID, Kit>();
             this.maxPlayers = this.config.getMaxPlayers();
+            this.chestManager = new ChestManager(this);
       }
 
       public void tickArena() {
@@ -78,25 +85,20 @@ public class Arena {
                                     this.started = true;
                                     this.players.forEach((px) -> {
                                           PacketUtil.sendTitle(px, ChatColor.GOLD.toString() + ChatColor.BOLD + "Go!", ChatColor.GRAY + "Game Started!", 0, 40, 0);
+                                          SidebarUtil.drawGameSidebar(px, this);
                                     });
+                                    removeBarriers();
                                     this.playGameSound(Sound.NOTE_PLING, 2);
                                     this.sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + "Game Started!");
                                     this.alivePlayers.forEach((px) -> {
                                           px.setGameMode(GameMode.SURVIVAL);
-                                          PlayerData data = BridgeWars.getInstance().getDataManager().getPlayerData(px.getUniqueId());
-
+                                          px.setWalkSpeed(0.2F);
+                                          px.getInventory().clear();
+                                          playerKits.get(px.getUniqueId()).getGameStartTask().accept(px);
+                                          px.setMaxHealth(40);
+                                          px.setHealth(40);
                                     });
-                                    for (int i = 0; i < config.getMaxPlayers(); i++) {
-                                          for (int x = -1; x <= 1; x += 0.5) {
-                                                for (int y = -1; y <= 2.5; y += 0.5) {
-                                                      for (int z = -1; z <= 1; z += 0.5) {
-                                                            Location nearLocation = config.getPlayerLocation(i).clone().add(x, y, z);
-                                                            if (nearLocation.getBlock().getType() != Material.BARRIER) continue;
-                                                            nearLocation.getBlock().setType(Material.AIR);
-                                                      }
-                                                }
-                                          }
-                                    }
+                                    started = true;
                                     return;
                               }
 
@@ -111,6 +113,11 @@ public class Arena {
                         }
 
                         if (this.ticks % 10 == 0) {
+
+                              for (Player alivePlayer : alivePlayers) {
+                                    PacketUtil.sendActionBar(alivePlayer, ChatColor.GRAY + "Selected Kit: " + ChatColor.GOLD + playerKits.get(alivePlayer.getUniqueId()).getName());
+                              }
+
                               var2 = this.players.iterator();
 
                               while(var2.hasNext()) {
@@ -123,6 +130,72 @@ public class Arena {
                               }
                         }
 
+                  }
+                  return;
+            }
+
+            if (ticks % 10 == 0) {
+                  for (Player p : players) {
+                        p.getScoreboard().getTeam("GamePlayers").setSuffix(ChatColor.YELLOW.toString() + alivePlayers.size());
+                        p.getScoreboard().getTeam("GameTime").setSuffix(ChatColor.YELLOW + SidebarUtil.parseSeconds(gameTime));
+                  }
+                  for (Player player : players) {
+                        if (player.getLocation().getY() < config.getVoidLevel()) {
+                              if (alivePlayers.contains(player)) {
+                                    EntityDamageEvent e = new EntityDamageEvent(player, EntityDamageEvent.DamageCause.VOID, 99999);
+                                    Bukkit.getPluginManager().callEvent(e);
+                              } else {
+                                    player.teleport(config.getSpectatorLocation());
+                              }
+                        }
+                  }
+            }
+
+            if (ticks % 20 == 0) {
+                  gameTime++;
+            }
+
+            if (won) {
+
+                  if (ticks % 20 == 0) {
+                        if (ticks % 40 == 0) {
+                              PlayerUtil.launchFirework(alivePlayers.get(0), Color.ORANGE);
+                        } else {
+                              PlayerUtil.launchFirework(alivePlayers.get(0), Color.YELLOW);
+                        }
+                  }
+
+                  if (ticks > 220) {
+
+                        won = false;
+                        alivePlayers.clear();
+                        playerKits.clear();
+                        players.forEach(p -> handleGameLeave(p, false));
+                        players.clear();
+                        playerSpawn.clear();
+                        gameTime = 0;
+                        pasteSchematic();
+                        chestManager.fillChestsAsync();
+                        ticks = 0;
+                        countdown = 0;
+                        started = false;
+
+                  }
+
+            }
+      }
+
+      public void removeBarriers() {
+            for (int i = 1; i <= config.getMaxPlayers(); i++) {
+                  Location rawNearLocation = config.getPlayerLocation(i);
+                  for (double x = -1; x <= 1; x += 0.5) {
+                        for (double y = -1; y <= 2.5; y += 0.5) {
+                              for (double z = -1; z <= 1; z += 0.5) {
+                                    Location nearLocation = rawNearLocation.clone().add(x, y, z);
+                                    if (nearLocation.getBlock().getType() != Material.BARRIER) continue;
+                                    nearLocation.getBlock().setType(Material.AIR);
+                              }
+                        }
                   }
             }
       }
@@ -139,6 +212,16 @@ public class Arena {
                   var4.printStackTrace();
                   System.out.println("[BridgeWars] An error occoured while pasting an arena schematic! (IOException)");
             }
+
+      }
+
+      public void handleWin(Player winner) {
+
+            players.forEach(p -> PacketUtil.sendTitle(p, ChatColor.RED.toString() + ChatColor.BOLD + "Game End!", ChatColor.GRAY + "Winner: " + winner.getDisplayName(), 0, 120, 0));
+            PacketUtil.sendTitle(winner, ChatColor.GOLD.toString() + ChatColor.BOLD + "WINNER", ChatColor.GRAY + "You win, Congratulations!", 0, 120, 0);
+            sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + "Game Over! Congratulations to " + winner.getDisplayName() + ChatColor.GRAY + " for winning!");
+            ticks = 19;
+            won = true;
 
       }
 
@@ -163,9 +246,10 @@ public class Arena {
                   player.setFlying(false);
                   player.setFireTicks(0);
                   player.setLevel(0);
+                  player.setWalkSpeed(0);
                   player.setExp(0.0F);
                   player.getInventory().clear();
-                  player.getInventory().setArmorContents(new ItemStack[0]);
+                  player.getInventory().setArmorContents(new ItemStack[] {null, null, null, null});
                   Iterator var4 = player.getActivePotionEffects().iterator();
                   Kit lastKit = null;
                   for (Kit k : BridgeWars.getInstance().getKitManager().getKits()) {
@@ -174,7 +258,7 @@ public class Arena {
                               break;
                         }
                   }
-                  if (lastKit == null || !data.isKitOwned(lastKit.getName())) {
+                  if (lastKit == null || (!data.isKitOwned(lastKit.getName()) && !lastKit.isFree())) {
                         for (Kit k : BridgeWars.getInstance().getKitManager().getKits()) {
                               if (k.isFree()) {
                                     lastKit = k;
@@ -222,21 +306,22 @@ public class Arena {
             }
       }
 
-      public void handleGameLeave(Player player) {
+      public void handleGameLeave(Player player, boolean removeFromPlayers) {
             if (this.players.contains(player)) {
                   PlayerData data = BridgeWars.getInstance().getDataManager().getPlayerData(player.getUniqueId());
                   data.setInGame(false);
                   player.teleport(BridgeWars.getInstance().getPluginConfig().getSpawnLocation());
                   player.getInventory().clear();
-                  player.getInventory().setArmorContents(new ItemStack[0]);
+                  player.getInventory().setArmorContents(new ItemStack[] {null, null, null, null});
                   player.getActivePotionEffects().forEach((pe) -> {
                         player.removePotionEffect(pe.getType());
                   });
                   player.setAllowFlight(false);
                   player.setGameMode(GameMode.SURVIVAL);
-                  player.playSound(player.getLocation(), Sound.LEVEL_UP, 10.0F, 10.0F);
+                  player.playSound(player.getLocation(), Sound.LEVEL_UP, 10.0F, 0);
                   player.setFoodLevel(20);
                   player.setHealth(20.0D);
+                  player.setMaxHealth(20);
                   player.setFireTicks(0);
                   player.setExp(0.0F);
                   player.setLevel(0);
@@ -264,14 +349,39 @@ public class Arena {
                   LobbyRunnable lr = new LobbyRunnable(player);
                   lr.runTaskTimer(BridgeWars.getInstance(), 1L, 10L);
                   BridgeWars.getInstance().getDataManager().getPlayerData(player.getUniqueId()).setLobbyRunnable(lr);
-                  this.players.remove(player);
-                  if (!this.started && this.alivePlayers.contains(player)) {
+                  if (removeFromPlayers) {
+                        players.remove(player);
+                  }
+                  if (this.alivePlayers.contains(player)) {
                         this.alivePlayers.remove(player);
-                        this.playerSpawn.remove(player);
-                        this.sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " quit " + ChatColor.GREEN + "(" + this.alivePlayers.size() + "/" + this.maxPlayers + ")");
-                        this.playGameSound(Sound.NOTE_BASS, 5);
+                        if (!this.started) {
+                              player.setWalkSpeed(0.2F);
+                              this.playerKits.remove(player.getUniqueId());
+                              this.playerSpawn.remove(player);
+                              this.sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " quit " + ChatColor.GREEN + "(" + this.alivePlayers.size() + "/" + this.maxPlayers + ")");
+                              this.playGameSound(Sound.NOTE_BASS, 5);
+                              return;
+                        }
+                        PlayerUtil.dropPlayerItems(player);
+
+                        if (System.currentTimeMillis() - data.getLastAttacked() < 20000L) {
+                              sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " was killed by " + data.getLastAttacker().getDisplayName() + ChatColor.GRAY + ".");
+                        } else {
+                              sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " took the L.");
+                        }
+
+                        playGameSound(Sound.ENDERDRAGON_HIT, 1);
+
+                        if (alivePlayers.size() == 1) {
+                              handleWin(alivePlayers.get(0));
+                        }
                   }
             }
+      }
+
+      public void setKit(UUID uuid, Kit kit) {
+            playerKits.put(uuid, kit);
+            BridgeWars.getInstance().getDataManager().getPlayerData(uuid).setLastKit(kit.getName());
       }
 
       public boolean isStarted() {
@@ -300,75 +410,157 @@ public class Arena {
                   PlayerQuitEvent e = (PlayerQuitEvent)event;
                   player = e.getPlayer();
                   if (this.alivePlayers.contains(player)) {
+                        this.players.remove(player);
+                        this.alivePlayers.remove(player);
                         if (!this.started) {
-                              this.alivePlayers.remove(player);
-                              this.players.remove(player);
+                              this.playerKits.remove(player.getUniqueId());
                               this.playerSpawn.remove(player);
                               this.sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " quit " + ChatColor.GREEN + "(" + this.alivePlayers.size() + "/" + this.maxPlayers + ")");
                               this.playGameSound(Sound.NOTE_BASS, 5);
+                              return;
+                        }
+                        if (won) return;
+                        PlayerUtil.dropPlayerItems(player);
+
+                        PlayerData data = BridgeWars.getInstance().getDataManager().getPlayerData(player.getUniqueId());
+                        if (System.currentTimeMillis() - data.getLastAttacked() < 20000L) {
+                              sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " was killed by " + data.getLastAttacker().getDisplayName() + ChatColor.GRAY + ".");
+                        } else {
+                              sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " took the L.");
+                        }
+
+                        playGameSound(Sound.ENDERDRAGON_HIT, 1);
+
+                        if (alivePlayers.size() == 1) {
+                              handleWin(alivePlayers.get(0));
+                        }
+
+                  }
+            } if (event instanceof EntityDamageByEntityEvent) {
+                  EntityDamageByEntityEvent e = (EntityDamageByEntityEvent)event;
+                  if (e.getEntity() instanceof Player && e.getDamager() instanceof Player) {
+                        Player victim = (Player) e.getEntity();
+                        Player attacker = (Player) e.getDamager();
+                        if (alivePlayers.contains(victim) && players.contains(attacker)) {
+                              if (!alivePlayers.contains(attacker)) {
+                                    e.setCancelled(true);
+                              }
                         }
                   }
-            } else if (event instanceof EntityDamageEvent) {
+            } if (event instanceof EntityDamageEvent) {
                   EntityDamageEvent e = (EntityDamageEvent)event;
                   if (e.getEntity() instanceof Player) {
                         player = (Player)e.getEntity();
                         if (this.alivePlayers.contains(player)) {
-                              if (!this.started || this.countdown > 0) {
+                              if (!this.started) {
                                     e.setCancelled(true);
+                                    return;
                               }
+                              if (won) {
+                                    e.setCancelled(true);
+                                    return;
+                              }
+                              if (e.getDamage() > (player.getHealth())) {
 
+                                    e.setCancelled(true);
+                                    alivePlayers.remove(player);
+                                    PlayerUtil.dropPlayerItems(player);
+                                    PacketUtil.vanishPlayer(player, players);
+                                    PlayerUtil.makeSpectator(player, config.getSpectatorLocation());
+
+                                    PlayerData data = BridgeWars.getInstance().getDataManager().getPlayerData(player.getUniqueId());
+                                    if (System.currentTimeMillis() - data.getLastAttacked() < 20000L) {
+                                          sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " was killed by " + data.getLastAttacker().getDisplayName() + ChatColor.GRAY + ".");
+                                    } else {
+                                          sendGameMessage(ChatColor.GOLD + "[!] " + ChatColor.GRAY + player.getDisplayName() + ChatColor.GRAY + " took the L.");
+                                    }
+
+                                    for (Player p : players) {
+                                          if (p != player) p.playSound(p.getLocation(), Sound.ENDERDRAGON_HIT, 10, 1 );
+                                    }
+
+                                    if (alivePlayers.size() == 1) {
+                                          handleWin(alivePlayers.get(0));
+                                    }
+
+                              }
+                        } else if (players.contains(player)) {
+                              e.setCancelled(true);
                         }
                   }
-            } else if (event instanceof BlockPlaceEvent) {
+            } if (event instanceof BlockPlaceEvent) {
                   BlockPlaceEvent e = (BlockPlaceEvent)event;
                   if (this.alivePlayers.contains(e.getPlayer())) {
-                        if (!this.started || this.countdown > 0) {
+                        if (!this.started) {
                               e.setCancelled(true);
                         }
 
+                  } else if (players.contains(e.getPlayer())) {
+                        e.setCancelled(true);
                   }
-            } else if (event instanceof BlockBreakEvent) {
+            } if (event instanceof BlockBreakEvent) {
                   BlockBreakEvent e = (BlockBreakEvent)event;
                   if (this.alivePlayers.contains(e.getPlayer())) {
-                        if (!this.started || this.countdown > 0) {
+                        if (!this.started) {
                               e.setCancelled(true);
                         }
 
+                  } else if (players.contains(e.getPlayer())) {
+                        e.setCancelled(true);
                   }
-            } else if (event instanceof PlayerInteractEvent) {
+            } if (event instanceof PlayerInteractEvent) {
                   PlayerInteractEvent e = (PlayerInteractEvent)event;
                   if (this.players.contains(e.getPlayer())) {
                         if (e.getItem() != null && e.getItem().getItemMeta() != null && e.getItem().getItemMeta().getDisplayName() != null) {
                               String itemName = e.getItem().getItemMeta().getDisplayName();
                               if (itemName.contains("Quit Game")) {
                                     e.setCancelled(true);
-                                    this.handleGameLeave(e.getPlayer());
+                                    this.handleGameLeave(e.getPlayer(), true);
+                                    return;
+                              }
+                              if (itemName.contains("Kit Selector")) {
+                                    e.setCancelled(true);
+                                    MenuUtil.openKitSelector(e.getPlayer(), playerKits.get(e.getPlayer().getUniqueId()).getName(), this);
                                     return;
                               }
                         }
 
                         if (this.alivePlayers.contains(e.getPlayer())) {
-                              if (!this.started || this.countdown > 0) {
+                              if (!this.started) {
                                     e.setCancelled(true);
+                                    return;
                               }
 
+                        } else {
+                              e.setCancelled(true);
                         }
                   }
-            } else if (event instanceof PlayerDropItemEvent) {
+            } if (event instanceof PlayerDropItemEvent) {
                   PlayerDropItemEvent e = (PlayerDropItemEvent)event;
                   if (this.alivePlayers.contains(e.getPlayer())) {
-                        if (!this.started || this.countdown > 0) {
+                        if (!this.started) {
                               e.setCancelled(true);
                         }
 
                   }
-            } else if (event instanceof InventoryClickEvent) {
+                  if (this.players.contains(e.getPlayer()) && !this.alivePlayers.contains(e.getPlayer())) {
+                        e.setCancelled(true);
+                  }
+            } if (event instanceof InventoryClickEvent) {
                   InventoryClickEvent e = (InventoryClickEvent)event;
                   if (this.alivePlayers.contains((Player)e.getWhoClicked())) {
-                        if (!this.started || this.countdown > 0) {
+                        if (!this.started) {
                               e.setCancelled(true);
                         }
 
+                  }
+                  if (this.players.contains((Player) e.getWhoClicked()) && !this.alivePlayers.contains((Player) e.getWhoClicked())) {
+                        e.setCancelled(true);
+                  }
+            } if (event instanceof PlayerPickupItemEvent) {
+                  PlayerPickupItemEvent e = (PlayerPickupItemEvent) event;
+                  if (players.contains(e.getPlayer()) && !alivePlayers.contains(e.getPlayer())) {
+                        e.setCancelled(true);
                   }
             }
       }
@@ -393,6 +585,10 @@ public class Arena {
             return this.alivePlayers.size();
       }
 
+      public int getGameTime() {
+            return gameTime;
+      }
+
       public int getMaxPlayers() {
             return this.maxPlayers;
       }
@@ -400,4 +596,9 @@ public class Arena {
       public String getMapName() {
             return this.name;
       }
+
+      public ChestManager getChestManager() {
+            return chestManager;
+      }
+
 }
